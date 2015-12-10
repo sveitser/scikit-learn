@@ -161,7 +161,7 @@ DERIVATIVES = {'tanh': inplace_tanh_derivative,
                'relu': inplace_relu_derivative}
 
 
-def squared_loss(y_true, y_pred):
+def squared_loss(y_true, y_pred, sample_weight=None):
     """Compute the squared loss for regression.
 
     Parameters
@@ -177,7 +177,10 @@ def squared_loss(y_true, y_pred):
     loss : float
         The degree to which the samples are correctly predicted.
     """
-    return ((y_true - y_pred) ** 2).mean() / 2
+    if sample_weight is None:
+        return ((y_true - y_pred) ** 2).mean() / 2
+    else:
+        return (sample_weight * (y_true - y_pred) ** 2).mean() / 2
 
 
 def log_loss(y_true, y_prob):

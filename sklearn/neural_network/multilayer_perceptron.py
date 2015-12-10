@@ -180,7 +180,7 @@ class BaseMultilayerPerceptron(six.with_metaclass(ABCMeta, BaseEstimator)):
         return loss, grad
 
     def _backprop(self, X, y, activations, deltas, coef_grads,
-                  intercept_grads):
+                  intercept_grads, sample_weight=None):
         """Compute the MLP loss function and its corresponding derivatives
         with respect to each parameter: weights and bias vectors.
 
@@ -222,7 +222,7 @@ class BaseMultilayerPerceptron(six.with_metaclass(ABCMeta, BaseEstimator)):
         activations = self._forward_pass(activations)
 
         # Get loss
-        loss = LOSS_FUNCTIONS[self.loss](y, activations[-1])
+        loss = LOSS_FUNCTIONS[self.loss](y, activations[-1], sample_weight)
         # Add L2 regularization term to loss
         values = np.sum(
             np.array([np.dot(s.ravel(), s.ravel()) for s in self.coefs_]))
@@ -315,7 +315,7 @@ class BaseMultilayerPerceptron(six.with_metaclass(ABCMeta, BaseEstimator)):
         intercept_init = rng.uniform(-init_bound, init_bound, fan_out)
         return coef_init, intercept_init
 
-    def _fit(self, X, y, incremental=False):
+    def _fit(self, X, y, incremental=False, sample_weight=None):
         # Make sure self.hidden_layer_sizes is a list
         hidden_layer_sizes = self.hidden_layer_sizes
         if not hasattr(hidden_layer_sizes, "__iter__"):
@@ -370,7 +370,8 @@ class BaseMultilayerPerceptron(six.with_metaclass(ABCMeta, BaseEstimator)):
         # Run the Stochastic optimization algorithm
         if self.algorithm in _STOCHASTIC_ALGOS:
             self._fit_stochastic(X, y, activations, deltas, coef_grads,
-                                 intercept_grads, layer_units, incremental)
+                                 intercept_grads, layer_units, incremental,
+                                 sample_weight)
 
         # Run the LBFGS algorithm
         elif self.algorithm == 'l-bfgs':
@@ -465,7 +466,8 @@ class BaseMultilayerPerceptron(six.with_metaclass(ABCMeta, BaseEstimator)):
         self._unpack(optimal_parameters)
 
     def _fit_stochastic(self, X, y, activations, deltas, coef_grads,
-                        intercept_grads, layer_units, incremental):
+                        intercept_grads, layer_units, incremental,
+                        sample_weight=None):
         rng = check_random_state(self.random_state)
 
         if not incremental or not hasattr(self, '_optimizer'):
@@ -501,9 +503,16 @@ class BaseMultilayerPerceptron(six.with_metaclass(ABCMeta, BaseEstimator)):
                 accumulated_loss = 0.0
                 for batch_slice in gen_batches(n_samples, batch_size):
                     activations[0] = X[batch_slice]
+
+                    if sample_weight is not None:
+                        w = sample_weight[batch_slice]
+                    else:
+                        w = None
+
                     batch_loss, coef_grads, intercept_grads = self._backprop(
                         X[batch_slice], y[batch_slice], activations, deltas,
-                        coef_grads, intercept_grads)
+                        coef_grads, intercept_grads, w)
+
                     accumulated_loss += batch_loss * (batch_slice.stop -
                                                       batch_slice.start)
 
@@ -591,7 +600,7 @@ class BaseMultilayerPerceptron(six.with_metaclass(ABCMeta, BaseEstimator)):
             if self.loss_curve_[-1] < self.best_loss_:
                 self.best_loss_ = self.loss_curve_[-1]
 
-    def fit(self, X, y):
+    def fit(self, X, y, sample_weight=None):
         """Fit the model to data matrix X and target y.
 
         Parameters
@@ -606,7 +615,7 @@ class BaseMultilayerPerceptron(six.with_metaclass(ABCMeta, BaseEstimator)):
         -------
         self : returns a trained MLP model.
         """
-        return self._fit(X, y, incremental=False)
+        return self._fit(X, y, incremental=False, sample_weight=sample_weight)
 
     @property
     def partial_fit(self):
